@@ -7,11 +7,11 @@ index 32fb618..2d70543 100644
 +proxyImages = true
 +proxyImagesLock = false       # lock proxyImages to the configured default
 diff --git a/src/prefs.nim b/src/prefs.nim
-index 1a75f75..a7a0516 100644
+index 1a75f75..3ab9be1 100644
 --- a/src/prefs.nim
 +++ b/src/prefs.nim
 @@ -9,0 +10,4 @@ var defaultPrefs*: Prefs
-+var lockedPrefs*: Table[string, bool]
++var lockedPrefs* = initTable[string, bool]()
 +
 +proc isPrefLocked*(name: string): bool =
 +  lockedPrefs.getOrDefault(name, false)
@@ -193,6 +193,17 @@ index e5639d1..481b4fe 100644
 -          genImg(list.banner)
 +        a(href=getPicUrl(list.banner, prefs.proxyImages), target="_blank"):
 +          genImg(list.banner, proxy=prefs.proxyImages)
+diff --git a/src/views/preferences.nim b/src/views/preferences.nim
+index b051a01..44c39b0 100644
+--- a/src/views/preferences.nim
++++ b/src/views/preferences.nim
+@@ -6 +6 @@ import renderutils
+-import ../types, ../prefs_impl
++import ../types, ../prefs, ../prefs_impl
+@@ -25 +25,2 @@ macro renderPrefs*(): untyped =
+-      of checkbox: discard
++      of checkbox:
++        stmt[0].add nnkCall.newTree(ident("isPrefLocked"), newLit(pref.name))
 diff --git a/src/views/profile.nim b/src/views/profile.nim
 index de09368..3273c17 100644
 --- a/src/views/profile.nim
@@ -226,7 +237,7 @@ index de09368..3273c17 100644
 -        renderBanner(user.banner)
 +        renderBanner(user.banner, prefs)
 diff --git a/src/views/renderutils.nim b/src/views/renderutils.nim
-index af2f05d..9916434 100644
+index af2f05d..161eebe 100644
 --- a/src/views/renderutils.nim
 +++ b/src/views/renderutils.nim
 @@ -9 +9 @@ const mediumWebp* = "?name=medium&format=webp"
@@ -241,6 +252,12 @@ index af2f05d..9916434 100644
 @@ -21 +21 @@ proc getMediumPic*(url: string): string =
 -  result = getPicUrl(result)
 +  result = getPicUrl(result, proxy)
+@@ -76 +76 @@ proc buttonReferer*(action, text, path: string; class=""; `method`="post"): VNod
+-proc genCheckbox*(pref, label: string; state: bool): VNode =
++proc genCheckbox*(pref, label: string; state: bool; disabled=false): VNode =
+@@ -79 +79 @@ proc genCheckbox*(pref, label: string; state: bool): VNode =
+-    input(name=pref, `type`="checkbox", checked=state)
++    input(name=pref, `type`="checkbox", checked=state, disabled=disabled)
 @@ -109 +109 @@ proc genNumberInput*(pref, label, state, placeholder: string; class=""; autofocu
 -proc genImg*(url: string; class=""; alt=""): VNode =
 +proc genImg*(url: string; class=""; alt=""; proxy=true): VNode =
