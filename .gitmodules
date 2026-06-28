@@ -1,0 +1,4 @@
+[submodule "zedeus/nitter"]
+	path = zedeus/nitter
+	url = https://github.com/zedeus/nitter.git
+	branch = master

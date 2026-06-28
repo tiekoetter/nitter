@@ -1,0 +1,29 @@
+diff --git a/public/md/about.md b/public/md/about.md
+index 3825e8f..796a796 100644
+--- a/public/md/about.md
++++ b/public/md/about.md
+@@ -21,0 +22,9 @@ maintained by the community.
++## Tiekoetter.com
++Other services: <https://www.tiekoetter.com/services>
++
++Forum: <https://forum.tiekoetter.com>
++
++Due to high bot traffic this instance REQUIRES JavaScript to be enabled. This instance uses [Anubis](https://github.com/TecharoHQ/anubis) as a bot protection gateway.
++
++A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com) this is a mirror of this instance.
++
+@@ -45,0 +55,5 @@ Twitter account.
++### Tiekoetter.com
++Donating: <https://www.tiekoetter.com/donate>
++
++### Nitter
++
+diff --git a/src/views/general.nim b/src/views/general.nim
+index d49804e..1b80c79 100644
+--- a/src/views/general.nim
++++ b/src/views/general.nim
+@@ -34,3 +34,3 @@ proc renderNavbar(cfg: Config; req: Request; rss, canonical: string): VNode =
+         icon "bird", title="Open in X", href=canonical
+-        a(href="https://liberapay.com/zedeus"): verbatim lp
++        a(href="https://liberapay.com/tiekoetter"): verbatim lp
+         icon "info", title="About", href="/about"

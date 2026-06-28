@@ -1,0 +1,75 @@
+name: Update zedeus/nitter submodule
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 4 * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-zedeus-nitter-submodule
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update submodule pointer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Update zedeus/nitter
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          branch="update/zedeus-nitter"
+
+          git submodule sync -- zedeus/nitter
+          git submodule update --init --remote -- zedeus/nitter
+
+          shopt -s nullglob
+          patches=(patches/*.patch patches/*.diff)
+          if [ "${#patches[@]}" -eq 0 ]; then
+            echo "No patches to check."
+          else
+            for patch in "${patches[@]}"; do
+              echo "Checking ${patch}"
+              git -C zedeus/nitter apply --unidiff-zero --check "../../${patch}"
+            done
+          fi
+
+          if git diff --quiet --exit-code -- zedeus/nitter; then
+            echo "zedeus/nitter is already up to date."
+            exit 0
+          fi
+
+          short_sha="$(git -C zedeus/nitter rev-parse --short HEAD)"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "${branch}"
+          git add zedeus/nitter
+          git commit -m "Update zedeus/nitter submodule to ${short_sha}"
+          git fetch origin "${branch}:refs/remotes/origin/${branch}" || true
+          git push --force-with-lease origin "${branch}"
+
+          title="Update zedeus/nitter submodule"
+          body="Updates the zedeus/nitter submodule pointer to ${short_sha}."
+
+          if gh pr view "${branch}" --json url --jq .url >/dev/null 2>&1; then
+            gh pr edit "${branch}" --title "${title}" --body "${body}"
+          else
+            gh pr create \
+              --base "${{ github.event.repository.default_branch }}" \
+              --head "${branch}" \
+              --title "${title}" \
+              --body "${body}"
+          fi

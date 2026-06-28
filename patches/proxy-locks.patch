@@ -1,0 +1,321 @@
+diff --git a/nitter.example.conf b/nitter.example.conf
+index 32fb618..2d70543 100644
+--- a/nitter.example.conf
++++ b/nitter.example.conf
+@@ -46,0 +47,3 @@ proxyVideos = true
++proxyVideosLock = false       # lock proxyVideos to the configured default
++proxyImages = true
++proxyImagesLock = false       # lock proxyImages to the configured default
+diff --git a/src/prefs.nim b/src/prefs.nim
+index 1a75f75..a7a0516 100644
+--- a/src/prefs.nim
++++ b/src/prefs.nim
+@@ -9,0 +10,4 @@ var defaultPrefs*: Prefs
++var lockedPrefs*: Table[string, bool]
++
++proc isPrefLocked*(name: string): bool =
++  lockedPrefs.getOrDefault(name, false)
+@@ -12,0 +17,2 @@ proc updateDefaultPrefs*(cfg: parsecfg.Config) =
++  lockedPrefs["proxyVideos"] = cfg.get("Preferences", "proxyVideosLock", false)
++  lockedPrefs["proxyImages"] = cfg.get("Preferences", "proxyImagesLock", false)
+diff --git a/src/prefs_impl.nim b/src/prefs_impl.nim
+index 699ec4c..1401dc5 100644
+--- a/src/prefs_impl.nim
++++ b/src/prefs_impl.nim
+@@ -96,0 +97,3 @@ genPrefs:
++    proxyImages(checkbox, true):
++      "Proxy images through the server"
++
+@@ -157 +160 @@ macro genParsePrefs*(prefs): untyped =
+-      if `name` in `prefs`:
++      if not isPrefLocked(`name`) and `name` in `prefs`:
+@@ -179,11 +182 @@ macro genUpdatePrefs*(): untyped =
+-      let val = @`name`
+-      let isDefault =
+-        when `kind` == input or `name` == "theme":
+-          if `default`.len != val.len: false
+-          else: val == `default`
+-        elif `kind` == checkbox:
+-          (val == "on") == `default`
+-        else:
+-          val notin `options` or val == `default`
+-
+-      if isDefault:
++      if isPrefLocked(`name`):
+@@ -192 +185,14 @@ macro genUpdatePrefs*(): untyped =
+-        savePref(`name`, val, `req`)
++        let val = @`name`
++        let isDefault =
++          when `kind` == input or `name` == "theme":
++            if `default`.len != val.len: false
++            else: val == `default`
++          elif `kind` == checkbox:
++            (val == "on") == `default`
++          else:
++            val notin `options` or val == `default`
++
++        if isDefault:
++          savePref(`name`, "", `req`, expire=true)
++        else:
++          savePref(`name`, val, `req`)
+@@ -213 +219 @@ macro genEncodePrefs*(prefs): untyped =
+-        if `prefs`.`ident` != `defaultIdent`:
++        if not isPrefLocked(`name`) and `prefs`.`ident` != `defaultIdent`:
+@@ -219 +225 @@ macro genEncodePrefs*(prefs): untyped =
+-        if `prefs`.`ident` != `defaultIdent`:
++        if not isPrefLocked(`name`) and `prefs`.`ident` != `defaultIdent`:
+@@ -227 +233,3 @@ macro genApplyPrefs*(params, req): untyped =
+-      if `name` in `params`:
++      if isPrefLocked(`name`):
++        savePref(`name`, "", `req`, expire=true)
++      elif `name` in `params`:
+diff --git a/src/routes/community.nim b/src/routes/community.nim
+index b850b6b..9d1ca30 100644
+--- a/src/routes/community.nim
++++ b/src/routes/community.nim
+@@ -16 +16 @@ template respCommunity*(cmty: Community; title: string; nav, vnode: typed) =
+-  let html = renderCommunity(vnode, nav, cmty)
++  let html = renderCommunity(vnode, nav, cmty, prefs)
+@@ -59 +59 @@ proc createCommunityRouter*(cfg: Config) =
+-                     renderCommunityAbout(cmty, mods))
++                     renderCommunityAbout(cmty, mods, prefs))
+diff --git a/src/routes/list.nim b/src/routes/list.nim
+index b4ab091..e475981 100644
+--- a/src/routes/list.nim
++++ b/src/routes/list.nim
+@@ -15 +15 @@ template respList*(list, timeline, title, vnode: typed) =
+-    html = renderList(vnode, timeline.query, list)
++    html = renderList(vnode, timeline.query, list, prefs)
+diff --git a/src/routes/status.nim b/src/routes/status.nim
+index f7fb1bb..db4af6f 100644
+--- a/src/routes/status.nim
++++ b/src/routes/status.nim
+@@ -59 +59 @@ proc createStatusRouter*(cfg: Config) =
+-        video = getPicUrl(conv.tweet.media[0].gif.url)
++        video = getPicUrl(conv.tweet.media[0].gif.url, prefs.proxyImages)
+diff --git a/src/utils.nim b/src/utils.nim
+index 95b46de..ecc6be2 100644
+--- a/src/utils.nim
++++ b/src/utils.nim
+@@ -42 +42 @@ proc getVidUrl*(link: string): string =
+-proc getPicUrl*(link: string): string =
++proc getPicUrl*(link: string; proxy=true): string =
+@@ -43,0 +44,7 @@ proc getPicUrl*(link: string): string =
++  if not proxy:
++    result = link
++    if not result.startsWith("http"):
++      if "twimg.com" notin result:
++        result.insert(twimg)
++      result.insert(https)
++    return
+@@ -49 +56 @@ proc getPicUrl*(link: string): string =
+-proc getOrigPicUrl*(link: string): string =
++proc getOrigPicUrl*(link: string; proxy=true): string =
+@@ -50,0 +58,4 @@ proc getOrigPicUrl*(link: string): string =
++  if not proxy:
++    result = getPicUrl(link, proxy=false)
++    result.add(if "?" in result: "&name=orig" else: "?name=orig")
++    return
+diff --git a/src/views/article.nim b/src/views/article.nim
+index 1ba9c8b..c5b9da4 100644
+--- a/src/views/article.nim
++++ b/src/views/article.nim
+@@ -34,2 +34,2 @@ proc renderAtomicParagraph(paragraph: ArticleParagraph; article: Article;
+-          a(href=getOrigPicUrl(media.url), target="_blank"):
+-            img(src=getSmallPic(media.url), alt="", loading="lazy")
++          a(href=getOrigPicUrl(media.url, prefs.proxyImages), target="_blank"):
++            img(src=getSmallPic(media.url, prefs.proxyImages), alt="", loading="lazy")
+@@ -199 +199,2 @@ proc renderArticle*(article: Article; tweets: Table[int64, Tweet];
+-          genImg(author.getUserPic("_bigger"), class=prefs.getAvatarClass)
++          genImg(author.getUserPic("_bigger"), class=prefs.getAvatarClass,
++                 proxy=prefs.proxyImages)
+@@ -243,2 +244,3 @@ proc renderArticle*(article: Article; tweets: Table[int64, Tweet];
+-      a(href=getOrigPicUrl(article.coverImage), target="_blank"):
+-        img(class="article-cover", src=getSmallPic(article.coverImage), alt="")
++      a(href=getOrigPicUrl(article.coverImage, prefs.proxyImages), target="_blank"):
++        img(class="article-cover",
++            src=getSmallPic(article.coverImage, prefs.proxyImages), alt="")
+diff --git a/src/views/broadcast.nim b/src/views/broadcast.nim
+index bfcb9ba..fe483b5 100644
+--- a/src/views/broadcast.nim
++++ b/src/views/broadcast.nim
+@@ -11 +11 @@ proc renderBroadcast*(bc: Broadcast; prefs: Prefs; path: string): VNode =
+-    thumb = getPicUrl(bc.thumb)
++    thumb = getPicUrl(bc.thumb, prefs.proxyImages)
+@@ -62 +62 @@ proc renderBroadcast*(bc: Broadcast; prefs: Prefs; path: string): VNode =
+-            genImg(getUserPic(bc.user.userPic, "_bigger"))
++            genImg(getUserPic(bc.user.userPic, "_bigger"), proxy=prefs.proxyImages)
+diff --git a/src/views/community.nim b/src/views/community.nim
+index 52f9041..443dc62 100644
+--- a/src/views/community.nim
++++ b/src/views/community.nim
+@@ -42 +42,2 @@ proc renderHashtagHeader*(community: Community; tag: string): VNode =
+-proc renderCommunityAbout*(community: Community; moderators: seq[User]): VNode =
++proc renderCommunityAbout*(community: Community; moderators: seq[User];
++                           prefs: Prefs): VNode =
+@@ -94 +95,2 @@ proc renderCommunityAbout*(community: Community; moderators: seq[User]): VNode =
+-              genImg(user.getUserPic("_bigger"), class="community-mod-avatar")
++              genImg(user.getUserPic("_bigger"), class="community-mod-avatar",
++                     proxy=prefs.proxyImages)
+@@ -103 +105 @@ proc renderCommunityAbout*(community: Community; moderators: seq[User]): VNode =
+-proc renderCommunity*(body, nav: VNode; community: Community): VNode =
++proc renderCommunity*(body, nav: VNode; community: Community; prefs: Prefs): VNode =
+@@ -107,2 +109,2 @@ proc renderCommunity*(body, nav: VNode; community: Community): VNode =
+-        a(href=getPicUrl(community.banner), target="_blank"):
+-          genImg(community.banner)
++        a(href=getPicUrl(community.banner, prefs.proxyImages), target="_blank"):
++          genImg(community.banner, proxy=prefs.proxyImages)
+diff --git a/src/views/general.nim b/src/views/general.nim
+index d49804e..93c1d58 100644
+--- a/src/views/general.nim
++++ b/src/views/general.nim
+@@ -96 +96 @@ proc renderHead*(prefs: Prefs; cfg: Config; req: Request; titleText=""; desc="";
+-      let bannerUrl = getPicUrl(banner)
++      let bannerUrl = getPicUrl(banner, prefs.proxyImages)
+@@ -101,2 +101,2 @@ proc renderHead*(prefs: Prefs; cfg: Config; req: Request; titleText=""; desc="";
+-      let preloadUrl = if "400x400" in url: getPicUrl(url)
+-                       else: getSmallPic(url)
++      let preloadUrl = if "400x400" in url: getPicUrl(url, prefs.proxyImages)
++                       else: getSmallPic(url, prefs.proxyImages)
+@@ -105 +105,2 @@ proc renderHead*(prefs: Prefs; cfg: Config; req: Request; titleText=""; desc="";
+-      let image = getUrlPrefix(cfg) & getPicUrl(url)
++      let imageUrl = getPicUrl(url, prefs.proxyImages)
++      let image = if prefs.proxyImages: getUrlPrefix(cfg) & imageUrl else: imageUrl
+diff --git a/src/views/list.nim b/src/views/list.nim
+index e5639d1..481b4fe 100644
+--- a/src/views/list.nim
++++ b/src/views/list.nim
+@@ -15 +15 @@ proc renderListTabs*(query: Query; path: string): VNode =
+-proc renderList*(body: VNode; query: Query; list: List): VNode =
++proc renderList*(body: VNode; query: Query; list: List; prefs: Prefs): VNode =
+@@ -19,2 +19,2 @@ proc renderList*(body: VNode; query: Query; list: List): VNode =
+-        a(href=getPicUrl(list.banner), target="_blank"):
+-          genImg(list.banner)
++        a(href=getPicUrl(list.banner, prefs.proxyImages), target="_blank"):
++          genImg(list.banner, proxy=prefs.proxyImages)
+diff --git a/src/views/profile.nim b/src/views/profile.nim
+index de09368..3273c17 100644
+--- a/src/views/profile.nim
++++ b/src/views/profile.nim
+@@ -26 +26 @@ proc renderUserCard*(user: User; prefs: Prefs; info: AccountInfo): VNode =
+-        url = getPicUrl(user.getUserPic())
++        url = getPicUrl(user.getUserPic(), prefs.proxyImages)
+@@ -32 +32 @@ proc renderUserCard*(user: User; prefs: Prefs; info: AccountInfo): VNode =
+-        genImg(user.getUserPic(size))
++        genImg(user.getUserPic(size), proxy=prefs.proxyImages)
+@@ -79 +79 @@ proc renderUserCard*(user: User; prefs: Prefs; info: AccountInfo): VNode =
+-proc renderPhotoRail(profile: Profile): VNode =
++proc renderPhotoRail(profile: Profile; prefs: Prefs): VNode =
+@@ -98 +98 @@ proc renderPhotoRail(profile: Profile): VNode =
+-          genImg(photo.url & photoSuffix)
++          genImg(photo.url & photoSuffix, proxy=prefs.proxyImages)
+@@ -100 +100 @@ proc renderPhotoRail(profile: Profile): VNode =
+-proc renderBanner(banner: string): VNode =
++proc renderBanner(banner: string; prefs: Prefs): VNode =
+@@ -107 +107,2 @@ proc renderBanner(banner: string): VNode =
+-      a(href=getPicUrl(banner), target="_blank"): genImg(banner)
++      a(href=getPicUrl(banner, prefs.proxyImages), target="_blank"):
++        genImg(banner, proxy=prefs.proxyImages)
+@@ -125 +126 @@ proc renderProfile*(profile: var Profile; prefs: Prefs; path: string): VNode =
+-        renderBanner(profile.user.banner)
++        renderBanner(profile.user.banner, prefs)
+@@ -132 +133 @@ proc renderProfile*(profile: var Profile; prefs: Prefs; path: string): VNode =
+-          renderPhotoRail(profile)
++          renderPhotoRail(profile, prefs)
+@@ -157 +158 @@ proc renderUserList*(user: User; results: Result[User]; prefs: Prefs;
+-        renderBanner(user.banner)
++        renderBanner(user.banner, prefs)
+diff --git a/src/views/renderutils.nim b/src/views/renderutils.nim
+index af2f05d..9916434 100644
+--- a/src/views/renderutils.nim
++++ b/src/views/renderutils.nim
+@@ -9 +9 @@ const mediumWebp* = "?name=medium&format=webp"
+-proc getSmallPic*(url: string): string =
++proc getSmallPic*(url: string; proxy=true): string =
+@@ -14 +14 @@ proc getSmallPic*(url: string): string =
+-  result = getPicUrl(result)
++  result = getPicUrl(result, proxy)
+@@ -16 +16 @@ proc getSmallPic*(url: string): string =
+-proc getMediumPic*(url: string): string =
++proc getMediumPic*(url: string; proxy=true): string =
+@@ -21 +21 @@ proc getMediumPic*(url: string): string =
+-  result = getPicUrl(result)
++  result = getPicUrl(result, proxy)
+@@ -109 +109 @@ proc genNumberInput*(pref, label, state, placeholder: string; class=""; autofocu
+-proc genImg*(url: string; class=""; alt=""): VNode =
++proc genImg*(url: string; class=""; alt=""; proxy=true): VNode =
+@@ -111 +111 @@ proc genImg*(url: string; class=""; alt=""): VNode =
+-    img(src=getPicUrl(url), class=class, alt=alt, loading="lazy")
++    img(src=getPicUrl(url, proxy), class=class, alt=alt, loading="lazy")
+diff --git a/src/views/space.nim b/src/views/space.nim
+index a5cac7b..c1ccca7 100644
+--- a/src/views/space.nim
++++ b/src/views/space.nim
+@@ -8 +8 @@ import ".."/[types, utils, formatters]
+-proc renderParticipant(p: SpaceParticipant; role: string): VNode =
++proc renderParticipant(p: SpaceParticipant; role: string; prefs: Prefs): VNode =
+@@ -11 +11 @@ proc renderParticipant(p: SpaceParticipant; role: string): VNode =
+-      genImg(p.avatarUrl.replace("_normal", "_bigger"))
++      genImg(p.avatarUrl.replace("_normal", "_bigger"), proxy=prefs.proxyImages)
+@@ -84 +84 @@ proc renderSpace*(sp: AudioSpace; prefs: Prefs; path: string): VNode =
+-              renderParticipant(admin, role)
++              renderParticipant(admin, role, prefs)
+@@ -86 +86 @@ proc renderSpace*(sp: AudioSpace; prefs: Prefs; path: string): VNode =
+-              renderParticipant(speaker, "")
++              renderParticipant(speaker, "", prefs)
+diff --git a/src/views/timeline.nim b/src/views/timeline.nim
+index 9456bf9..278d994 100644
+--- a/src/views/timeline.nim
++++ b/src/views/timeline.nim
+@@ -90 +90,2 @@ proc renderUser(user: User; prefs: Prefs): VNode =
+-          genImg(user.getUserPic("_bigger"), class=prefs.getAvatarClass)
++          genImg(user.getUserPic("_bigger"), class=prefs.getAvatarClass,
++                 proxy=prefs.proxyImages)
+diff --git a/src/views/tweet.nim b/src/views/tweet.nim
+index b66269a..3dbeecf 100644
+--- a/src/views/tweet.nim
++++ b/src/views/tweet.nim
+@@ -13 +13,2 @@ proc renderMiniAvatar*(user: User; prefs: Prefs): VNode =
+-  genImg(user.getUserPic("_mini"), class=(prefs.getAvatarClass & " mini"))
++  genImg(user.getUserPic("_mini"), class=(prefs.getAvatarClass & " mini"),
++         proxy=prefs.proxyImages)
+@@ -22 +23 @@ proc renderArticleCard(preview: ArticlePreview; prefs: Prefs): VNode =
+-            genImg(preview.coverImage)
++            genImg(preview.coverImage, proxy=prefs.proxyImages)
+@@ -48 +49,2 @@ proc renderHeader(tweet: Tweet; retweet: string; pinned: bool; prefs: Prefs;
+-        genImg(tweet.user.getUserPic(size), class=prefs.getAvatarClass)
++        genImg(tweet.user.getUserPic(size), class=prefs.getAvatarClass,
++               proxy=prefs.proxyImages)
+@@ -64 +66 @@ proc renderAltText(altText: string): VNode =
+-proc renderPhotoAttachment(photo: Photo; bigThumb=false): VNode =
++proc renderPhotoAttachment(photo: Photo; prefs: Prefs; bigThumb=false): VNode =
+@@ -71,2 +73,2 @@ proc renderPhotoAttachment(photo: Photo; bigThumb=false): VNode =
+-    a(href=getOrigPicUrl(photo.url), class="still-image", target="_blank"):
+-      genImg(thumb, alt=photo.altText)
++    a(href=getOrigPicUrl(photo.url, prefs.proxyImages), class="still-image", target="_blank"):
++      genImg(thumb, alt=photo.altText, proxy=prefs.proxyImages)
+@@ -110 +112,2 @@ proc renderVideoAttachment(videoData: Video; prefs: Prefs; path=""; bigThumb=fal
+-    thumb = if bigThumb: getMediumPic(videoData.thumb) else: getSmallPic(videoData.thumb)
++    thumb = if bigThumb: getMediumPic(videoData.thumb, prefs.proxyImages)
++            else: getSmallPic(videoData.thumb, prefs.proxyImages)
+@@ -155 +158 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
+-  let thumb = getSmallPic(gif.thumb)
++  let thumb = getSmallPic(gif.thumb, prefs.proxyImages)
+@@ -163 +166 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
+-        source(src=getPicUrl(gif.url), `type`="video/mp4")
++        source(src=getPicUrl(gif.url, prefs.proxyImages), `type`="video/mp4")
+@@ -166 +169 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
+-        source(src=getPicUrl(gif.url), `type`="video/mp4")
++        source(src=getPicUrl(gif.url, prefs.proxyImages), `type`="video/mp4")
+@@ -198 +201 @@ proc renderMedia(media: seq[Media]; prefs: Prefs; path: string; bigThumb=false):
+-            renderPhotoAttachment(mediaItem.photo, bigThumb)
++            renderPhotoAttachment(mediaItem.photo, prefs, bigThumb)
+@@ -219 +222 @@ proc renderPoll(poll: Poll): VNode =
+-proc renderCardImage(card: Card): VNode =
++proc renderCardImage(card: Card; prefs: Prefs): VNode =
+@@ -222 +225 @@ proc renderCardImage(card: Card): VNode =
+-      genImg(card.image)
++      genImg(card.image, proxy=prefs.proxyImages)
+@@ -250 +253 @@ proc renderCard(card: Card; prefs: Prefs; path: string): VNode =
+-          renderCardImage(card)
++          renderCardImage(card, prefs)
