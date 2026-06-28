@@ -1,0 +1,7 @@
+diff --git a/Dockerfile b/Dockerfile
+index e1e3d99..0d24795 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -9,0 +10,2 @@ RUN nimble install -y --depsOnly
++RUN find /root/.nimble -name redpool.nimble -exec sed -i 's#https://github.com/zedeus/redis #https://github.com/zedeus/redis.git #g' {} +
++
