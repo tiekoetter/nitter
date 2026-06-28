@@ -7,5 +7,4 @@ Upstream Nitter is tracked as the `zedeus/nitter` submodule. Local changes live
 in `patches/` and are applied by the Docker image workflow before building the
 image published to GHCR.
 
-See `patches/README.md` for the patch workflow. The project is licensed under
-AGPL-3.0, following upstream Nitter.
+The project is licensed under AGPL-3.0, following upstream Nitter.
