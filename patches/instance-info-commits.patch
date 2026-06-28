@@ -1,0 +1,21 @@
+diff --git a/src/views/about.nim b/src/views/about.nim
+index e7e8de9..fe438be 100644
+--- a/src/views/about.nim
++++ b/src/views/about.nim
+@@ -6,2 +6,4 @@ const
+-  date = staticExec("git show -s --format=\"%cd\" --date=format:\"%Y.%m.%d\"")
+-  hash = staticExec("git show -s --format=\"%h\"")
++  date = staticExec("sh -c 'if [ -n \"$NITTER_UPSTREAM_DATE\" ]; then printf %s \"$NITTER_UPSTREAM_DATE\"; else git show -s --format=\"%cd\" --date=format:\"%Y.%m.%d\"; fi'")
++  hash = staticExec("sh -c 'if [ -n \"$NITTER_UPSTREAM_HASH\" ]; then printf %s \"$NITTER_UPSTREAM_HASH\"; else git show -s --format=\"%h\"; fi'")
++  forkHash = staticExec("sh -c 'printf %s \"$NITTER_FORK_HASH\"'")
++  forkRepo = staticExec("sh -c 'if [ -n \"$NITTER_FORK_REPOSITORY\" ]; then printf %s \"$NITTER_FORK_REPOSITORY\"; else printf %s tiekoetter/nitter; fi'")
+@@ -9 +11,2 @@ const
+-  version = &"{date}-{hash}"
++  forkLink = "https://github.com/" & forkRepo & "/commit/" & forkHash
++  version = &"{date}-{hash[0 .. 6]}"
+@@ -26,0 +30,5 @@ proc renderAbout*(): VNode =
++    if forkHash.len > 0:
++      p:
++        small:
++          text "Fork commit "
++          a(href=forkLink): text forkHash[0 .. 6]

@@ -1,7 +1,17 @@
 diff --git a/Dockerfile b/Dockerfile
-index e1e3d99..0d24795 100644
+index 251b63a..24b668a 100644
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -9,0 +10,2 @@ RUN nimble install -y --depsOnly
+@@ -3,0 +4,9 @@ LABEL maintainer="setenforce@protonmail.com"
++ARG NITTER_UPSTREAM_DATE
++ARG NITTER_UPSTREAM_HASH
++ARG NITTER_FORK_HASH
++ARG NITTER_FORK_REPOSITORY
++ENV NITTER_UPSTREAM_DATE=${NITTER_UPSTREAM_DATE}
++ENV NITTER_UPSTREAM_HASH=${NITTER_UPSTREAM_HASH}
++ENV NITTER_FORK_HASH=${NITTER_FORK_HASH}
++ENV NITTER_FORK_REPOSITORY=${NITTER_FORK_REPOSITORY}
++
+@@ -9,0 +19,2 @@ RUN nimble install -y --depsOnly
 +RUN find /root/.nimble -name redpool.nimble -exec sed -i 's#https://github.com/zedeus/redis #redis #g' {} +
 +
