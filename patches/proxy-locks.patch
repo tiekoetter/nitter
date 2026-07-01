@@ -122,9 +122,9 @@ index 1ba9c8b..c5b9da4 100644
 +++ b/src/views/article.nim
 @@ -34,2 +34,2 @@ proc renderAtomicParagraph(paragraph: ArticleParagraph; article: Article;
 -          a(href=getOrigPicUrl(media.url), target="_blank"):
--            img(src=getSmallPic(media.url), alt="", loading="lazy")
+-            img(src=getSmallPic(media.url), alt=entity.caption, loading="lazy")
 +          a(href=getOrigPicUrl(media.url, prefs.proxyImages), target="_blank"):
-+            img(src=getSmallPic(media.url, prefs.proxyImages), alt="", loading="lazy")
++            img(src=getSmallPic(media.url, prefs.proxyImages), alt=entity.caption, loading="lazy")
 @@ -199 +199,2 @@ proc renderArticle*(article: Article; tweets: Table[int64, Tweet];
 -          genImg(author.getUserPic("_bigger"), class=prefs.getAvatarClass)
 +          genImg(author.getUserPic("_bigger"), class=prefs.getAvatarClass,

@@ -45,10 +45,25 @@ jobs:
             exit 0
           fi
 
+          apply_patch() {
+            local patch="$1"
+            local patch_path="../../${patch}"
+            if ! grep -q '^ ' "${patch}"; then
+              git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}"
+              git -C zedeus/nitter apply --unidiff-zero "${patch_path}"
+            elif git -C zedeus/nitter apply --check "${patch_path}" 2>/dev/null; then
+              git -C zedeus/nitter apply "${patch_path}"
+            elif git -C zedeus/nitter apply --3way --check "${patch_path}" 2>/dev/null; then
+              git -C zedeus/nitter apply --3way "${patch_path}"
+            else
+              git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}"
+              git -C zedeus/nitter apply --unidiff-zero "${patch_path}"
+            fi
+          }
+
           for patch in "${patches[@]}"; do
             echo "Applying ${patch}"
-            git -C zedeus/nitter apply --unidiff-zero --check "../../${patch}"
-            git -C zedeus/nitter apply --unidiff-zero "../../${patch}"
+            apply_patch "${patch}"
           done
 
       - name: Extract build metadata
