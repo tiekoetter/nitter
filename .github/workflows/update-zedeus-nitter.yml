@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  statuses: write
 
 concurrency:
   group: update-zedeus-nitter-submodule
@@ -35,17 +36,6 @@ jobs:
           git submodule sync -- zedeus/nitter
           git submodule update --init --remote -- zedeus/nitter
 
-          shopt -s nullglob
-          patches=(patches/*.patch patches/*.diff)
-          if [ "${#patches[@]}" -eq 0 ]; then
-            echo "No patches to check."
-          else
-            for patch in "${patches[@]}"; do
-              echo "Checking ${patch}"
-              git -C zedeus/nitter apply --unidiff-zero --check "../../${patch}"
-            done
-          fi
-
           if git diff --quiet --exit-code -- zedeus/nitter; then
             echo "zedeus/nitter is already up to date."
             exit 0
@@ -58,6 +48,7 @@ jobs:
           git switch -C "${branch}"
           git add zedeus/nitter
           git commit -m "Update zedeus/nitter submodule to ${short_sha}"
+          pr_head_sha="$(git rev-parse HEAD)"
           git fetch origin "${branch}:refs/remotes/origin/${branch}" || true
           git push --force-with-lease origin "${branch}"
 
@@ -72,4 +63,34 @@ jobs:
               --head "${branch}" \
               --title "${title}" \
               --body "${body}"
+          fi
+
+          shopt -s nullglob
+          patches=(patches/*.patch patches/*.diff)
+          patch_status=success
+          if [ "${#patches[@]}" -eq 0 ]; then
+            echo "No patches to check."
+          else
+            for patch in "${patches[@]}"; do
+              echo "Checking ${patch}"
+              if ! git -C zedeus/nitter apply --unidiff-zero --check "../../${patch}"; then
+                patch_status=failure
+              fi
+            done
+          fi
+
+          target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          if [ "${patch_status}" = success ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/statuses/${pr_head_sha}" \
+              -f state=success \
+              -f context="Patch integration" \
+              -f description="Patches apply to the updated submodule." \
+              -f target_url="${target_url}"
+          else
+            gh api "repos/${GITHUB_REPOSITORY}/statuses/${pr_head_sha}" \
+              -f state=failure \
+              -f context="Patch integration" \
+              -f description="Patches need to be rebased for this submodule update." \
+              -f target_url="${target_url}"
+            exit 1
           fi
