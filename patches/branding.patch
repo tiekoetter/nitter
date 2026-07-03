@@ -1,23 +1,36 @@
 diff --git a/public/md/about.md b/public/md/about.md
-index 3825e8f..796a796 100644
+index 3825e8f..06fc91f 100644
 --- a/public/md/about.md
 +++ b/public/md/about.md
-@@ -21,0 +22,9 @@ maintained by the community.
-+## Tiekoetter.com
-+Other services: <https://www.tiekoetter.com/services>
+@@ -18,7 +18,16 @@ Nitter's GitHub wiki contains
+ [instances](https://github.com/zedeus/nitter/wiki/Instances) and
+ [browser extensions](https://github.com/zedeus/nitter/wiki/Extensions)
+ maintained by the community.
+ 
++Tiekoetter.com
++Other services: [https://www.tiekoetter.com/services](https://www.tiekoetter.com/services)
 +
-+Forum: <https://forum.tiekoetter.com>
++Forum: [https://forum.tiekoetter.com](https://forum.tiekoetter.com/)
 +
 +Due to high bot traffic this instance REQUIRES JavaScript to be enabled. This instance uses [Anubis](https://github.com/TecharoHQ/anubis) as a bot protection gateway.
 +
-+A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com) this is a mirror of this instance.
++A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com/) this is a mirror of this instance.
 +
-@@ -45,0 +55,5 @@ Twitter account.
-+### Tiekoetter.com
-+Donating: <https://www.tiekoetter.com/donate>
+ ## Why use Nitter?
+ 
+ It's impossible to use Twitter without JavaScript enabled, and as of 2024 you
+@@ -43,6 +52,11 @@ Twitter account.
+ 
+ ## Donating
+ 
++Tiekoetter.com
++Donating: [https://www.tiekoetter.com/donate](https://www.tiekoetter.com/donate)
 +
-+### Nitter
++Nitter
 +
+ Liberapay: https://liberapay.com/zedeus \
+ Patreon: https://patreon.com/nitter \
+ BTC: bc1qpqpzjkcpgluhzf7x9yqe7jfe8gpfm5v08mdr55 \
 diff --git a/src/views/general.nim b/src/views/general.nim
 index d49804e..1b80c79 100644
 --- a/src/views/general.nim
