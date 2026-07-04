@@ -1,20 +1,19 @@
 diff --git a/public/md/about.md b/public/md/about.md
-index 3825e8f..06fc91f 100644
+index 3825e8f..70da17c 100644
 --- a/public/md/about.md
 +++ b/public/md/about.md
-@@ -18,7 +18,16 @@ Nitter's GitHub wiki contains
- [instances](https://github.com/zedeus/nitter/wiki/Instances) and
+@@ -19,6 +19,15 @@ Nitter's GitHub wiki contains
  [browser extensions](https://github.com/zedeus/nitter/wiki/Extensions)
  maintained by the community.
  
-+Tiekoetter.com
++## Tiekoetter.com
 +Other services: [https://www.tiekoetter.com/services](https://www.tiekoetter.com/services)
 +
 +Forum: [https://forum.tiekoetter.com](https://forum.tiekoetter.com/)
 +
 +Due to high bot traffic this instance REQUIRES JavaScript to be enabled. This instance uses [Anubis](https://github.com/TecharoHQ/anubis) as a bot protection gateway.
 +
-+A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com/) this is a mirror of this instance.
++A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com/). This is a mirror of this instance.
 +
  ## Why use Nitter?
  
@@ -23,20 +22,24 @@ index 3825e8f..06fc91f 100644
  
  ## Donating
  
-+Tiekoetter.com
++### Tiekoetter.com
 +Donating: [https://www.tiekoetter.com/donate](https://www.tiekoetter.com/donate)
 +
-+Nitter
++### Nitter
 +
  Liberapay: https://liberapay.com/zedeus \
  Patreon: https://patreon.com/nitter \
  BTC: bc1qpqpzjkcpgluhzf7x9yqe7jfe8gpfm5v08mdr55 \
 diff --git a/src/views/general.nim b/src/views/general.nim
-index d49804e..1b80c79 100644
+index 37213c2..f76dcd5 100644
 --- a/src/views/general.nim
 +++ b/src/views/general.nim
-@@ -34,3 +34,3 @@ proc renderNavbar(cfg: Config; req: Request; rss, canonical: string): VNode =
+@@ -32,7 +32,7 @@ proc renderNavbar(cfg: Config; req: Request; rss, canonical: string): VNode =
+         if rss.len > 0:
+           icon "rss", title="RSS Feed", href=rss
          icon "bird", title="Open in X", href=canonical
 -        a(href="https://liberapay.com/zedeus"): verbatim lp
 +        a(href="https://liberapay.com/tiekoetter"): verbatim lp
          icon "info", title="About", href="/about"
+         icon "cog", title="Preferences", href=("/settings?referer=" & encodeUrl(path))
+ 
