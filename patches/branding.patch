@@ -2,7 +2,7 @@ diff --git a/public/md/about.md b/public/md/about.md
 index 3825e8f..70da17c 100644
 --- a/public/md/about.md
 +++ b/public/md/about.md
-@@ -19,6 +19,16 @@ Nitter's GitHub wiki contains
+@@ -19,6 +19,17 @@ Nitter's GitHub wiki contains
  [browser extensions](https://github.com/zedeus/nitter/wiki/Extensions)
  maintained by the community.
  
@@ -20,7 +20,7 @@ index 3825e8f..70da17c 100644
  ## Why use Nitter?
  
  It's impossible to use Twitter without JavaScript enabled, and as of 2024 you
-@@ -43,6 +52,11 @@ Twitter account.
+@@ -43,6 +54,11 @@ Twitter account.
  
  ## Donating
  
