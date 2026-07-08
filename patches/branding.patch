@@ -2,7 +2,7 @@ diff --git a/public/md/about.md b/public/md/about.md
 index 3825e8f..70da17c 100644
 --- a/public/md/about.md
 +++ b/public/md/about.md
-@@ -19,6 +19,15 @@ Nitter's GitHub wiki contains
+@@ -19,6 +19,16 @@ Nitter's GitHub wiki contains
  [browser extensions](https://github.com/zedeus/nitter/wiki/Extensions)
  maintained by the community.
  
@@ -14,6 +14,8 @@ index 3825e8f..70da17c 100644
 +Due to high bot traffic this instance REQUIRES JavaScript to be enabled. This instance uses [Anubis](https://github.com/TecharoHQ/anubis) as a bot protection gateway.
 +
 +A drop-in replacement for x.com URLs is available in [xnologin.com](https://xnologin.com/). This is a mirror of this instance.
++
++Impressum / Legal norice: [https://www.tiekoetter.com/legal-notice](https://www.tiekoetter.com/legal-notice)
 +
  ## Why use Nitter?
  
