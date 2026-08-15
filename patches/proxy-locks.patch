@@ -6,6 +6,17 @@ index 32fb618..2d70543 100644
 +proxyVideosLock = false       # lock proxyVideos to the configured default
 +proxyImages = true
 +proxyImagesLock = false       # lock proxyImages to the configured default
+diff --git a/src/formatters.nim b/src/formatters.nim
+index d325eb6..e97b60b 100644
+--- a/src/formatters.nim
++++ b/src/formatters.nim
+@@ -87,0 +88,6 @@ proc replaceUrls*(body: string; prefs: Prefs; absolute=""): string =
++
++proc getCardLink*(card: Card; prefs: Prefs): string =
++  var url = card.url
++  if card.image.len > 0 and (url == card.image or url.startsWith("/pic/")):
++    url = getPicUrl(card.image, prefs.proxyImages)
++  replaceUrls(url, prefs)
 diff --git a/src/prefs.nim b/src/prefs.nim
 index 1a75f75..3ab9be1 100644
 --- a/src/prefs.nim
@@ -90,6 +101,20 @@ index b850b6b..9d1ca30 100644
 @@ -59 +59 @@ proc createCommunityRouter*(cfg: Config) =
 -                     renderCommunityAbout(cmty, mods))
 +                     renderCommunityAbout(cmty, mods, prefs))
+diff --git a/src/routes/embed.nim b/src/routes/embed.nim
+index 2b36e38..e3cde41 100644
+--- a/src/routes/embed.nim
++++ b/src/routes/embed.nim
+@@ -64 +64 @@ proc createEmbedRouter*(cfg: Config) =
+-      resp renderVideoEmbed(tweet, cfg, request)
++      resp renderVideoEmbed(tweet, cfg, request, prefs)
+@@ -135 +135,5 @@ proc createEmbedRouter*(cfg: Config) =
+-        let thumbUrl = getUrlPrefix(cfg) & getPicUrl(tweet.media[0].getThumb)
++        let
++          prefs = requestPrefs()
++          thumbPath = getPicUrl(tweet.media[0].getThumb, prefs.proxyImages)
++          thumbUrl = if prefs.proxyImages: getUrlPrefix(cfg) & thumbPath
++                     else: thumbPath
 diff --git a/src/routes/list.nim b/src/routes/list.nim
 index b4ab091..e475981 100644
 --- a/src/routes/list.nim
@@ -101,7 +126,15 @@ diff --git a/src/routes/media.nim b/src/routes/media.nim
 index c3a708a..990757f 100644
 --- a/src/routes/media.nim
 +++ b/src/routes/media.nim
-@@ -159,0 +160,3 @@ proc createMediaRouter*(cfg: Config) =
+@@ -135,0 +136,3 @@ proc createMediaRouter*(cfg: Config) =
++      let prefs = requestPrefs()
++      cond not (isPrefLocked("proxyImages") and not prefs.proxyImages)
++
+@@ -147,0 +151,3 @@ proc createMediaRouter*(cfg: Config) =
++      let prefs = requestPrefs()
++      cond not (isPrefLocked("proxyImages") and not prefs.proxyImages)
++
+@@ -159,0 +166,3 @@ proc createMediaRouter*(cfg: Config) =
 +      let prefs = requestPrefs()
 +      cond not (isPrefLocked("proxyVideos") and not prefs.proxyVideos)
 +
@@ -128,6 +161,13 @@ index f7fb1bb..db4af6f 100644
 +        video = if prefs.proxyVideos:
 +                  getVidUrl(conv.tweet.media[0].gif.url)
 +                else: conv.tweet.media[0].gif.url
+diff --git a/src/routes/timeline.nim b/src/routes/timeline.nim
+index 986ef60..38e9306 100644
+--- a/src/routes/timeline.nim
++++ b/src/routes/timeline.nim
+@@ -134 +134 @@ proc createTimelineRouter*(cfg: Config) =
+-      let aboutHtml = renderAboutAccount(info)
++      let aboutHtml = renderAboutAccount(info, prefs)
 diff --git a/src/utils.nim b/src/utils.nim
 index 95b46de..ecc6be2 100644
 --- a/src/utils.nim
@@ -180,6 +220,16 @@ index 1ba9c8b..c5b9da4 100644
 +      a(href=getOrigPicUrl(article.coverImage, prefs.proxyImages), target="_blank"):
 +        img(class="article-cover",
 +            src=getSmallPic(article.coverImage, prefs.proxyImages), alt="")
+diff --git a/src/views/about_account.nim b/src/views/about_account.nim
+index 9df2387..8d92f6b 100644
+--- a/src/views/about_account.nim
++++ b/src/views/about_account.nim
+@@ -8 +8 @@ import ".."/[types, formatters]
+-proc renderAboutAccount*(info: AccountInfo): VNode =
++proc renderAboutAccount*(info: AccountInfo; prefs: Prefs): VNode =
+@@ -19 +19 @@ proc renderAboutAccount*(info: AccountInfo): VNode =
+-        genImg(getUserPic(info.userPic, "_200x200"))
++        genImg(getUserPic(info.userPic, "_200x200"), proxy=prefs.proxyImages)
 diff --git a/src/views/broadcast.nim b/src/views/broadcast.nim
 index bfcb9ba..fe483b5 100644
 --- a/src/views/broadcast.nim
@@ -190,6 +240,29 @@ index bfcb9ba..fe483b5 100644
 @@ -62 +62 @@ proc renderBroadcast*(bc: Broadcast; prefs: Prefs; path: string): VNode =
 -            genImg(getUserPic(bc.user.userPic, "_bigger"))
 +            genImg(getUserPic(bc.user.userPic, "_bigger"), proxy=prefs.proxyImages)
+diff --git a/src/views/embed.nim b/src/views/embed.nim
+index 8e49586..d1c51b1 100644
+--- a/src/views/embed.nim
++++ b/src/views/embed.nim
+@@ -5 +5 @@ from jester import Request
+-import ".."/[types, formatters, prefs]
++import ".."/[types, formatters]
+@@ -12 +12,6 @@ const
+-proc renderVideoEmbed*(tweet: Tweet; cfg: Config; req: Request): string =
++proc renderVideoEmbed*(tweet: Tweet; cfg: Config; req: Request;
++                       prefs: Prefs): string =
++  var embedPrefs = prefs
++  embedPrefs.hlsPlayback = true
++  embedPrefs.mp4Playback = true
++
+@@ -17 +22,0 @@ proc renderVideoEmbed*(tweet: Tweet; cfg: Config; req: Request): string =
+-    prefs = Prefs(hlsPlayback: true, mp4Playback: true, proxyVideos: defaultPrefs.proxyVideos)
+@@ -21 +25 @@ proc renderVideoEmbed*(tweet: Tweet; cfg: Config; req: Request): string =
+-    renderHead(prefs, cfg, req, video=vidUrl, images=(@[thumb]))
++    renderHead(embedPrefs, cfg, req, video=vidUrl, images=(@[thumb]))
+@@ -26 +30 @@ proc renderVideoEmbed*(tweet: Tweet; cfg: Config; req: Request): string =
+-        renderVideo(video, prefs, "")
++        renderVideo(video, embedPrefs, "")
 diff --git a/src/views/community.nim b/src/views/community.nim
 index 52f9041..443dc62 100644
 --- a/src/views/community.nim
@@ -285,15 +358,49 @@ diff --git a/src/views/rss.nimf b/src/views/rss.nimf
 index 8028e0d..f7cc783 100644
 --- a/src/views/rss.nimf
 +++ b/src/views/rss.nimf
+@@ -54,0 +55,5 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
++#proc getRssImageUrl(url: string; prefs: Prefs; urlPrefix: string): string =
++#let imageUrl = getPicUrl(url, prefs.proxyImages)
++#result = if prefs.proxyImages: urlPrefix & imageUrl else: imageUrl
++#end proc
++#
 @@ -55 +55 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
 -#proc renderRssMedia(media: Media; tweet: Tweet; urlPrefix: string): string =
 +#proc renderRssMedia(media: Media; tweet: Tweet; prefs: Prefs; urlPrefix: string): string =
+@@ -59 +64 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-<img src="${urlPrefix}${getPicUrl(photo.url)}" style="max-width:250px;" />
++<img src="${getRssImageUrl(photo.url, prefs, urlPrefix)}" style="max-width:250px;" />
+@@ -64 +69 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-  <img src="${urlPrefix}${getPicUrl(video.thumb)}" style="max-width:250px;" />
++  <img src="${getRssImageUrl(video.thumb, prefs, urlPrefix)}" style="max-width:250px;" />
+@@ -68 +73 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-#  let thumb = &"{urlPrefix}{getPicUrl(gif.thumb)}"
++#  let thumb = getRssImageUrl(gif.thumb, prefs, urlPrefix)
 @@ -69 +69 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
 -#  let url = &"{urlPrefix}{getPicUrl(gif.url)}"
 +#  let url = if prefs.proxyVideos: &"{urlPrefix}{getVidUrl(gif.url)}" else: gif.url
+@@ -76 +81,2 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-#let cardLink = if card.url.startsWith("/"): urlPrefix & card.url else: replaceUrls(card.url, prefs)
++#let rawCardLink = getCardLink(card, prefs)
++#let cardLink = if rawCardLink.startsWith("/"): urlPrefix & rawCardLink else: rawCardLink
+@@ -84 +90 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-<img src="${urlPrefix}${getPicUrl(card.image)}" style="max-width:250px;" />
++<img src="${getRssImageUrl(card.image, prefs, urlPrefix)}" style="max-width:250px;" />
+@@ -106 +112 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-#proc renderRssArticle(article: ArticlePreview; urlPrefix: string): string =
++#proc renderRssArticle(article: ArticlePreview; prefs: Prefs; urlPrefix: string): string =
+@@ -112 +118 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-<img src="${urlPrefix}${getPicUrl(article.coverImage)}" style="max-width:250px;" />
++<img src="${getRssImageUrl(article.coverImage, prefs, urlPrefix)}" style="max-width:250px;" />
 @@ -168 +168 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
 -${renderRssMedia(media, tweet, urlPrefix)}
 +${renderRssMedia(media, tweet, prefs, urlPrefix)}
+@@ -174 +180 @@ Twitter feed for: ${desc}. Generated by ${getUrlPrefix(cfg)}
+-${renderRssArticle(tweet.articlePreview.get(), urlPrefix)}
++${renderRssArticle(tweet.articlePreview.get(), prefs, urlPrefix)}
+@@ -249 +255 @@ proc renderTimelineRss*(profile: Profile; cfg: Config; prefs: Prefs; multi=false
+-      <url>${urlPrefix}${getPicUrl(profile.user.getUserPic(style="_400x400"))}</url>
++      <url>${getRssImageUrl(profile.user.getUserPic(style="_400x400"), prefs, urlPrefix)}</url>
 diff --git a/src/views/renderutils.nim b/src/views/renderutils.nim
 index af2f05d..161eebe 100644
 --- a/src/views/renderutils.nim
@@ -346,6 +453,29 @@ index 9456bf9..278d994 100644
 -          genImg(user.getUserPic("_bigger"), class=prefs.getAvatarClass)
 +          genImg(user.getUserPic("_bigger"), class=prefs.getAvatarClass,
 +                 proxy=prefs.proxyImages)
+@@ -143 +144 @@ proc renderListCard(r: ListSearchResult): VNode =
+-proc renderListCard(r: ListSearchResult): VNode =
++proc renderListCard(r: ListSearchResult; prefs: Prefs): VNode =
+@@ -149 +150 @@ proc renderListCard(r: ListSearchResult): VNode =
+-        genImg(r.list.banner)
++        genImg(r.list.banner, proxy=prefs.proxyImages)
+@@ -162 +163 @@ proc renderListCard(r: ListSearchResult): VNode =
+-                genImg(r.facepiles[i], class="list-facepile")
++                genImg(r.facepiles[i], class="list-facepile", proxy=prefs.proxyImages)
+@@ -164 +165 @@ proc renderListCard(r: ListSearchResult): VNode =
+-              genImg(r.facepiles[i], class="list-facepile")
++              genImg(r.facepiles[i], class="list-facepile", proxy=prefs.proxyImages)
+@@ -169 +170,2 @@ proc renderListCard(r: ListSearchResult): VNode =
+-              genImg(r.owner.getUserPic("_mini"), class="list-facepile")
++              genImg(r.owner.getUserPic("_mini"), class="list-facepile",
++                     proxy=prefs.proxyImages)
+@@ -171 +173,2 @@ proc renderListCard(r: ListSearchResult): VNode =
+-            genImg(r.owner.getUserPic("_mini"), class="list-facepile")
++            genImg(r.owner.getUserPic("_mini"), class="list-facepile",
++                   proxy=prefs.proxyImages)
+@@ -186 +189 @@ proc renderTimelineLists*(results: Result[ListSearchResult]; prefs: Prefs;
+-        renderListCard(list)
++        renderListCard(list, prefs)
 diff --git a/src/views/tweet.nim b/src/views/tweet.nim
 index b66269a..3dbeecf 100644
 --- a/src/views/tweet.nim
@@ -399,6 +529,9 @@ index b66269a..3dbeecf 100644
 @@ -222 +225 @@ proc renderCardImage(card: Card): VNode =
 -      genImg(card.image)
 +      genImg(card.image, proxy=prefs.proxyImages)
+@@ -241 +244 @@ proc renderCard(card: Card; prefs: Prefs; path: string): VNode =
+-  let url = replaceUrls(card.url, prefs)
++  let url = getCardLink(card, prefs)
 @@ -250 +253 @@ proc renderCard(card: Card; prefs: Prefs; path: string): VNode =
 -          renderCardImage(card)
 +          renderCardImage(card, prefs)
