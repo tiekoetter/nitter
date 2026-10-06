@@ -1,0 +1,261 @@
+diff --git a/nitter.example.conf b/nitter.example.conf
+index 4e040f8..e173566 100644
+--- a/nitter.example.conf
++++ b/nitter.example.conf
+@@ -22,6 +22,8 @@ redisMaxConnections = 30
+ [Config]
+ hmacKey = "secretkey"        # CHANGE THIS to a unique random value (e.g. `openssl rand -hex 32`); signs media urls
+ base64Media = false          # use base64 encoding for proxied media urls
++enableSearch = true          # allow search pages
++enableProfiles = true        # allow profile, timeline, followers, and following pages
+ enableRSS = true             # master switch, set to false to disable all RSS feeds
+ enableRSSUserTweets = true   # /@user/rss
+ enableRSSUserReplies = true  # /@user/with_replies/rss
+diff --git a/src/config.nim b/src/config.nim
+index b46a979..12dd70d 100644
+--- a/src/config.nim
++++ b/src/config.nim
+@@ -13,7 +13,10 @@ proc get*[T](config: parseCfg.Config; section, key: string; default: T): T =
+ proc getConfig*(path: string): (Config, parseCfg.Config) =
+   var cfg = loadConfig(path)
+ 
+-  let masterRss = cfg.get("Config", "enableRSS", true)
++  let
++    masterRss = cfg.get("Config", "enableRSS", true)
++    enableSearch = cfg.get("Config", "enableSearch", true)
++    enableProfiles = cfg.get("Config", "enableProfiles", true)
+ 
+   let conf = Config(
+     # Server
+@@ -39,11 +42,13 @@ proc getConfig*(path: string): (Config, parseCfg.Config) =
+     hmacKey: cfg.get("Config", "hmacKey", "secretkey"),
+     base64Media: cfg.get("Config", "base64Media", false),
+     minTokens: cfg.get("Config", "tokenCount", 10),
+-    enableRSSUserTweets: masterRss and cfg.get("Config", "enableRSSUserTweets", true),
+-    enableRSSUserReplies: masterRss and cfg.get("Config", "enableRSSUserReplies", true),
+-    enableRSSUserMedia: masterRss and cfg.get("Config", "enableRSSUserMedia", true),
+-    enableRSSUserArticles: masterRss and cfg.get("Config", "enableRSSUserArticles", true),
+-    enableRSSSearch: masterRss and cfg.get("Config", "enableRSSSearch", true),
++    enableSearch: enableSearch,
++    enableProfiles: enableProfiles,
++    enableRSSUserTweets: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserTweets", true),
++    enableRSSUserReplies: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserReplies", true),
++    enableRSSUserMedia: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserMedia", true),
++    enableRSSUserArticles: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserArticles", true),
++    enableRSSSearch: enableSearch and masterRss and cfg.get("Config", "enableRSSSearch", true),
+     enableRSSList: masterRss and cfg.get("Config", "enableRSSList", true),
+     enableDebug: cfg.get("Config", "enableDebug", false),
+     proxy: cfg.get("Config", "proxy", ""),
+diff --git a/src/nitter.nim b/src/nitter.nim
+index a76dda6..5b2c97a 100644
+--- a/src/nitter.nim
++++ b/src/nitter.nim
+@@ -7,7 +7,7 @@ from os import getEnv, normalizedPath
+ import jester
+ 
+ import types, config, prefs, formatters, redis_cache, http_pool, auth, apiutils
+-import views/[general, about]
++import views/[general, about, feature]
+ import routes/[
+   preferences, timeline, status, media, search, rss, list, community, debug,
+   unsupported, embed, resolver, broadcast, space, article, router_utils]
+@@ -86,7 +86,10 @@ routes:
+     applyUrlPrefs()
+ 
+   get "/":
+-    resp renderMain(renderSearch(), request, cfg, requestPrefs())
++    if cfg.enableSearch:
++      resp renderMain(renderSearch(), request, cfg, requestPrefs())
++    resp renderMain(renderDisabledFeature("Search", "https://x.com/search"),
++                    request, cfg, requestPrefs(), "Search disabled")
+ 
+   get "/about":
+     resp renderMain(renderAbout(), request, cfg, requestPrefs())
+diff --git a/src/routes/rss.nim b/src/routes/rss.nim
+index 038096c..9f2ccc3 100644
+--- a/src/routes/rss.nim
++++ b/src/routes/rss.nim
+@@ -88,7 +88,8 @@ proc createRssRouter*(cfg: Config) =
+ 
+     get "/@name/rss":
+       cond '.' notin @"name"
+-      if not cfg.enableRSSUserTweets:
++      if not cfg.enableRSSUserTweets or
++         (not cfg.enableSearch and "," in @"name"):
+         resp Http403, showError("RSS feed is disabled", cfg)
+       let
+         prefs = requestPrefs()
+@@ -109,7 +110,8 @@ proc createRssRouter*(cfg: Config) =
+       cond @"tab" in ["with_replies", "media", "search", "articles"]
+       # articles can't be approximated by search, so multi-user is unsupported
+       cond not (@"tab" == "articles" and ',' in @"name")
+-      if not cfg.tabRssEnabled(@"tab"):
++      if not cfg.tabRssEnabled(@"tab") or
++         (not cfg.enableSearch and "," in @"name"):
+         resp Http403, showError("RSS feed is disabled", cfg)
+       let
+         prefs = requestPrefs()
+diff --git a/src/routes/search.nim b/src/routes/search.nim
+index 7c7fd14..a9c8ce5 100644
+--- a/src/routes/search.nim
++++ b/src/routes/search.nim
+@@ -5,7 +5,7 @@ import jester
+ 
+ import router_utils
+ import ".."/[query, types, api, formatters]
+-import ../views/[general, search]
++import ../views/[general, search, feature]
+ 
+ include "../views/opensearch.nimf"
+ 
+@@ -14,6 +14,11 @@ export search
+ proc createSearchRouter*(cfg: Config) =
+   router search:
+     get "/search/?":
++      if not cfg.enableSearch:
++        let xUrl = getTwitterLink(request.path, request.params)
++        resp renderMain(renderDisabledFeature("Search", xUrl), request, cfg,
++                        requestPrefs(), "Search disabled")
++
+       let q = @"q"
+       if q.len > 500:
+         resp Http400, showError("Search input too long.", cfg)
+@@ -62,6 +67,8 @@ proc createSearchRouter*(cfg: Config) =
+       redirect("/search?f=tweets&q=" & encodeUrl("#" & @"hash"))
+ 
+     get "/opensearch":
++      if not cfg.enableSearch:
++        resp Http404
+       let
+         url = getUrlPrefix(cfg) & "/search?f=tweets&q="
+         headers = {"Content-Type": "application/opensearchdescription+xml"}
+diff --git a/src/routes/timeline.nim b/src/routes/timeline.nim
+index c7949a2..ae2bd96 100644
+--- a/src/routes/timeline.nim
++++ b/src/routes/timeline.nim
+@@ -4,7 +4,7 @@ import jester, karax/vdom
+ 
+ import router_utils
+ import ".."/[types, redis_cache, formatters, query, api]
+-import ../views/[general, profile, timeline, status, search, about_account]
++import ../views/[general, profile, timeline, status, search, about_account, feature]
+ 
+ export vdom
+ export uri, sequtils
+@@ -121,19 +121,29 @@ template respUserId*() =
+ 
+ proc createTimelineRouter*(cfg: Config) =
+   router timeline:
++    template disabledProfile {.dirty.} =
++      if not cfg.enableProfiles:
++        let xUrl = getTwitterLink(request.path, request.params)
++        resp renderMain(renderDisabledFeature("Profile views", xUrl), request,
++                        cfg, requestPrefs(), "Profile views disabled")
++
+     get "/i/user/@user_id":
++      disabledProfile()
+       respUserId()
+ 
+     get "/intent/user":
++      disabledProfile()
+       respUserId()
+ 
+     get "/intent/follow/?":
++      disabledProfile()
+       let username = request.params.getOrDefault("screen_name")
+       if username.len == 0:
+         resp Http400, showError("Missing screen_name parameter", cfg)
+       redirect("/" & username)
+ 
+     get "/@name/about/?":
++      disabledProfile()
+       cond @"name".allCharsInSet({'a'..'z', 'A'..'Z', '0'..'9', '_'})
+       let
+         prefs = requestPrefs()
+@@ -151,6 +161,7 @@ proc createTimelineRouter*(cfg: Config) =
+       cond @"kind" in ["followers", "following"]
+       cond '.' notin @"name"
+       cond @"name".allCharsInSet({'a'..'z', 'A'..'Z', '0'..'9', '_'})
++      disabledProfile()
+       let
+         prefs = requestPrefs()
+         name = @"name"
+@@ -187,11 +198,17 @@ proc createTimelineRouter*(cfg: Config) =
+       cond @"tab" in ["with_replies", "media", "search", "articles", ""]
+       # articles can't be approximated by search, so multi-user is unsupported
+       cond not (@"tab" == "articles" and ',' in @"name")
++      disabledProfile()
+       let
+         prefs = requestPrefs()
+         after = getCursor()
+         names = getNames(@"name")
+ 
++      if not cfg.enableSearch and (@"tab" == "search" or names.len != 1):
++        let xUrl = getTwitterLink(request.path, request.params)
++        resp renderMain(renderDisabledFeature("Search", xUrl), request, cfg,
++                        prefs, "Search disabled")
++
+       var query = request.getQuery(@"tab", @"name", prefs)
+       if names.len != 1:
+         query.fromUser = names
+diff --git a/src/sass/general.scss b/src/sass/general.scss
+index e6247d6..304f6ee 100644
+--- a/src/sass/general.scss
++++ b/src/sass/general.scss
+@@ -11,6 +11,27 @@
+   text-align: center;
+ }
+ 
++.disabled-feature {
++  text-align: center;
++
++  .disabled-feature-link {
++    display: block;
++    max-width: 240px;
++    margin: 24px auto 8px;
++    padding: 14px 18px;
++    border: 1px solid var(--accent_border);
++    border-radius: 4px;
++    background: var(--bg_elements);
++    font-size: 1.5em;
++    font-weight: bold;
++
++    &:hover {
++      border-color: var(--accent);
++      text-decoration: none;
++    }
++  }
++}
++
+ .search-bar > form {
+   @include center-panel(var(--darkest_grey));
+ 
+diff --git a/src/types.nim b/src/types.nim
+index 0a748ba..e089370 100644
+--- a/src/types.nim
++++ b/src/types.nim
+@@ -429,6 +429,8 @@ type
+     hmacKey*: string
+     base64Media*: bool
+     minTokens*: int
++    enableSearch*: bool
++    enableProfiles*: bool
+     enableRSSUserTweets*: bool
+     enableRSSUserReplies*: bool
+     enableRSSUserMedia*: bool
+diff --git a/src/views/feature.nim b/src/views/feature.nim
+index 5767024..da0d2bf 100644
+--- a/src/views/feature.nim
++++ b/src/views/feature.nim
+@@ -12,3 +12,10 @@ proc renderFeature*(): VNode =
+     p:
+       text "To find out more about the Nitter project, see the "
+       a(href="/about"): text "About page"
++
++proc renderDisabledFeature*(feature, xUrl: string): VNode =
++  buildHtml(tdiv(class="overlay-panel disabled-feature")):
++    h1: text feature & " disabled"
++    p: text "This feature is disabled on this instance."
++    a(class="disabled-feature-link icon-bird", href=xUrl):
++      text " Open on X"
+
