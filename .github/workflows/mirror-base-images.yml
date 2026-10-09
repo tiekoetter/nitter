@@ -50,3 +50,10 @@ jobs:
             --platform linux/amd64 \
             public.ecr.aws/docker/library/alpine:3.24.2 \
             ghcr.io/tiekoetter/nitter-alpine:3.24.2
+
+      - name: Copy BuildKit image
+        run: |
+          "${RUNNER_TEMP}/bin/crane" copy \
+            --platform linux/amd64 \
+            mirror.gcr.io/moby/buildkit:buildx-stable-1 \
+            ghcr.io/tiekoetter/nitter-buildkit:buildx-stable-1
