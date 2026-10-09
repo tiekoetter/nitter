@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: stable
+          cache: false
 
       - name: Install crane
         env:
@@ -36,12 +37,16 @@ jobs:
             --username "${GITHUB_ACTOR}" \
             --password-stdin
 
-      - name: Copy base images
+      - name: Copy Nim base image
         run: |
           "${RUNNER_TEMP}/bin/crane" copy \
+            --platform linux/amd64 \
             mirror.gcr.io/nimlang/nim:2.2.6-alpine-regular \
             ghcr.io/tiekoetter/nitter-nim:2.2.6-alpine-regular
 
+      - name: Copy Alpine base image
+        run: |
           "${RUNNER_TEMP}/bin/crane" copy \
+            --platform linux/amd64 \
             public.ecr.aws/docker/library/alpine:3.24.2 \
             ghcr.io/tiekoetter/nitter-alpine:3.24.2
