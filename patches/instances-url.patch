@@ -1,0 +1,11 @@
+diff --git a/src/nitter.nim b/src/nitter.nim
+--- a/src/nitter.nim
++++ b/src/nitter.nim
+@@ -12,6 +12,6 @@ import routes/[
+   unsupported, embed, resolver, broadcast, space, article, router_utils]
+ 
+-const instancesUrl = "https://github.com/zedeus/nitter/wiki/Instances"
++const instancesUrl = "https://codeberg.org/shitter/shitter/wiki/Instances"
+ const issuesUrl = "https://github.com/zedeus/nitter/issues"
+ 
+ let
