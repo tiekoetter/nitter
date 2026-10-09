@@ -74,15 +74,19 @@ jobs:
           shopt -s nullglob
           patches=(patches/*.patch patches/*.diff)
           patch_status=success
-          check_patch() {
+          apply_patch() {
             local patch="$1"
             local patch_path="../../${patch}"
-            if grep -q '^ ' "${patch}"; then
-              git -C zedeus/nitter apply --check "${patch_path}" 2>/dev/null ||
-                git -C zedeus/nitter apply --3way --check "${patch_path}" 2>/dev/null ||
-                git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}"
+            if ! grep -q '^ ' "${patch}"; then
+              git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}" &&
+                git -C zedeus/nitter apply --unidiff-zero "${patch_path}"
+            elif git -C zedeus/nitter apply --check "${patch_path}" 2>/dev/null; then
+              git -C zedeus/nitter apply "${patch_path}"
+            elif git -C zedeus/nitter apply --3way --check "${patch_path}" 2>/dev/null; then
+              git -C zedeus/nitter apply --3way "${patch_path}"
             else
-              git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}"
+              git -C zedeus/nitter apply --unidiff-zero --check "${patch_path}" &&
+                git -C zedeus/nitter apply --unidiff-zero "${patch_path}"
             fi
           }
 
@@ -90,9 +94,10 @@ jobs:
             echo "No patches to check."
           else
             for patch in "${patches[@]}"; do
-              echo "Checking ${patch}"
-              if ! check_patch "${patch}"; then
+              echo "Applying ${patch}"
+              if ! apply_patch "${patch}"; then
                 patch_status=failure
+                break
               fi
             done
           fi
