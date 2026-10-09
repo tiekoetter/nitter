@@ -1,0 +1,88 @@
+diff --git a/nitter.example.conf b/nitter.example.conf
+--- a/nitter.example.conf
++++ b/nitter.example.conf
+@@ -24,6 +24,7 @@ hmacKey = "secretkey"        # CHANGE THIS to a unique random value (e.g. `opens
+ base64Media = false          # use base64 encoding for proxied media urls
+ enableSearch = true          # allow search pages
+ enableProfiles = true        # allow profile, timeline, followers, and following pages
++customHomepage = ""          # Markdown file shown at / instead of search, e.g. ./public/md/home.md
+ enableRSS = true             # master switch, set to false to disable all RSS feeds
+ enableRSSUserTweets = true   # /@user/rss
+ enableRSSUserReplies = true  # /@user/with_replies/rss
+diff --git a/src/config.nim b/src/config.nim
+--- a/src/config.nim
++++ b/src/config.nim
+@@ -44,6 +44,7 @@ proc getConfig*(path: string): (Config, parseCfg.Config) =
+     minTokens: cfg.get("Config", "tokenCount", 10),
+     enableSearch: enableSearch,
+     enableProfiles: enableProfiles,
++    customHomepage: cfg.get("Config", "customHomepage", ""),
+     enableRSSUserTweets: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserTweets", true),
+     enableRSSUserReplies: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserReplies", true),
+     enableRSSUserMedia: enableProfiles and masterRss and cfg.get("Config", "enableRSSUserMedia", true),
+diff --git a/src/nitter.nim b/src/nitter.nim
+--- a/src/nitter.nim
++++ b/src/nitter.nim
+@@ -7,7 +7,7 @@ from os import getEnv, normalizedPath
+ import jester
+ 
+ import types, config, prefs, formatters, redis_cache, http_pool, auth, apiutils
+-import views/[general, about, feature]
++import views/[general, about, feature, home]
+ import routes/[
+   preferences, timeline, status, media, search, rss, list, community, debug,
+   unsupported, embed, resolver, broadcast, space, article, router_utils]
+@@ -47,6 +47,7 @@ setMaxConcurrentReqs(cfg.maxConcurrentReqs)
+ setMaxRetries(cfg.maxRetries)
+ setRetryDelayMs(cfg.retryDelayMs)
+ initAboutPage(cfg.staticDir)
++initHomePage(cfg.customHomepage)
+ 
+ waitFor initRedisPool(cfg)
+ stdout.write &"Connected to Redis at {cfg.redisHost}:{cfg.redisPort}\n"
+@@ -86,6 +87,8 @@ routes:
+     applyUrlPrefs()
+ 
+   get "/":
++    if cfg.customHomepage.len > 0:
++      resp renderMain(renderHomePage(), request, cfg, requestPrefs())
+     if cfg.enableSearch:
+       resp renderMain(renderSearch(), request, cfg, requestPrefs())
+     resp renderMain(renderDisabledFeature("Search", "https://x.com/search"),
+diff --git a/src/types.nim b/src/types.nim
+--- a/src/types.nim
++++ b/src/types.nim
+@@ -431,6 +431,7 @@ type
+     minTokens*: int
+     enableSearch*: bool
+     enableProfiles*: bool
++    customHomepage*: string
+     enableRSSUserTweets*: bool
+     enableRSSUserReplies*: bool
+     enableRSSUserMedia*: bool
+diff --git a/src/views/home.nim b/src/views/home.nim
+new file mode 100644
+--- /dev/null
++++ b/src/views/home.nim
+@@ -0,0 +1,21 @@
++# SPDX-License-Identifier: AGPL-3.0-only
++import markdown
++import karax/[karaxdsl, vdom]
++
++var homeHtml: string
++
++proc initHomePage*(path: string) =
++  if path.len == 0:
++    return
++
++  try:
++    homeHtml = markdown(readFile(path))
++  except IOError:
++    stderr.write "Custom home page Markdown file not found: " & path & "\n"
++    stderr.flushFile
++    homeHtml = "<h1>Custom home page unavailable</h1>" &
++               "<p>The configured Markdown file could not be read.</p>"
++
++proc renderHomePage*(): VNode =
++  buildHtml(tdiv(class="overlay-panel custom-homepage")):
++    verbatim homeHtml
