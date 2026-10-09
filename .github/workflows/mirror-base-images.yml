@@ -1,0 +1,47 @@
+name: Mirror Docker base images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/mirror-base-images.yml
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  mirror:
+    name: Copy base images to GHCR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+
+      - name: Install crane
+        env:
+          GOBIN: ${{ runner.temp }}/bin
+        run: go install github.com/google/go-containerregistry/cmd/crane@v0.22.1
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "${GHCR_TOKEN}" | "${RUNNER_TEMP}/bin/crane" auth login ghcr.io \
+            --username "${GITHUB_ACTOR}" \
+            --password-stdin
+
+      - name: Copy base images
+        run: |
+          "${RUNNER_TEMP}/bin/crane" copy \
+            mirror.gcr.io/nimlang/nim:2.2.6-alpine-regular \
+            ghcr.io/tiekoetter/nitter-nim:2.2.6-alpine-regular
+
+          "${RUNNER_TEMP}/bin/crane" copy \
+            public.ecr.aws/docker/library/alpine:3.24.2 \
+            ghcr.io/tiekoetter/nitter-alpine:3.24.2
