@@ -107,6 +107,8 @@ jobs:
         with:
           context: zedeus/nitter
           push: ${{ github.event_name != 'pull_request' }}
+          cache-from: type=gha,scope=nitter-build
+          cache-to: type=gha,mode=max,scope=nitter-build
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |

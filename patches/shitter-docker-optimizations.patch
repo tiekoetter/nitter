@@ -1,0 +1,151 @@
+diff --git a/.dockerignore b/.dockerignore
+index 9bf2fee..aadff34 100644
+--- a/.dockerignore
++++ b/.dockerignore
+@@ -1,3 +1,5 @@
++.github
++*.patch
+ *.png
+ *.md
+ LICENSE
+diff --git a/Dockerfile b/Dockerfile
+index 5047bf9..8f8100f 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,5 +1,10 @@
+ FROM ghcr.io/tiekoetter/nitter-nim:2.2.6-alpine-regular as nim
+-LABEL maintainer="setenforce@protonmail.com"
++
++# Disable link-time optimization by default for faster builds.
++ARG ENABLE_LTO=0
++
++# Keep build caches separate for each target in multi-platform builds.
++ARG TARGETPLATFORM
+ 
+ ARG NITTER_UPSTREAM_DATE
+ ARG NITTER_UPSTREAM_HASH
+@@ -10,19 +15,28 @@ ENV NITTER_UPSTREAM_HASH=${NITTER_UPSTREAM_HASH}
+ ENV NITTER_FORK_HASH=${NITTER_FORK_HASH}
+ ENV NITTER_FORK_REPOSITORY=${NITTER_FORK_REPOSITORY}
+ 
+-RUN apk --no-cache add libsass-dev pcre
++RUN --mount=type=cache,id=apk-${TARGETPLATFORM},target=/var/cache/apk,sharing=locked \
++    apk add libsass-dev pcre
+ 
+ WORKDIR /src/nitter
+ 
+ COPY nitter.nimble .
+-RUN nimble install -y --depsOnly
+-RUN find /root/.nimble -name redpool.nimble -exec sed -i 's#https://github.com/zedeus/redis #redis #g' {} +
+-
++RUN --mount=type=cache,id=nimble-${TARGETPLATFORM},target=/root/.nimble,sharing=locked \
++    --mount=type=cache,id=nim-${TARGETPLATFORM},target=/root/.cache/nim,sharing=locked \
++    nimble install -y --depsOnly
++RUN --mount=type=cache,id=nimble-${TARGETPLATFORM},target=/root/.nimble,sharing=locked \
++    find /root/.nimble -name redpool.nimble \
++      -exec sed -i 's#https://github.com/zedeus/redis #redis #g' {} +
+ 
+ COPY . .
+-RUN nimble build -d:danger -d:lto -d:strip --mm:refc \
+-    && nimble scss \
+-    && nimble md
++RUN --mount=type=cache,id=nimble-${TARGETPLATFORM},target=/root/.nimble,sharing=locked \
++    --mount=type=cache,id=nim-${TARGETPLATFORM}-lto-${ENABLE_LTO},target=/root/.cache/nim,sharing=locked \
++    sh -c 'set -e; \
++      LTO=""; \
++      if [ "$ENABLE_LTO" = "1" ]; then LTO="-d:lto"; fi; \
++      nimble build -d:danger -d:strip --mm:refc $LTO; \
++      nimble scss; \
++      nimble md'
+ 
+ FROM ghcr.io/tiekoetter/nitter-alpine:3.24.2
+ WORKDIR /src/
+diff --git a/config.nims b/config.nims
+index 3ee4842..380e967 100644
+--- a/config.nims
++++ b/config.nims
+@@ -2,6 +2,9 @@
+ --define:useStdLib
+ --threads:off
+ 
++# compile C files in parallel (0 = all CPUs)
++--parallelBuild:0
++
+ # workaround httpbeast file upload bug
+ --assertions:off
+ 
+diff --git a/src/http_pool.nim b/src/http_pool.nim
+index 2553dd9..f57c952 100644
+--- a/src/http_pool.nim
++++ b/src/http_pool.nim
+@@ -1,5 +1,5 @@
+ # SPDX-License-Identifier: AGPL-3.0-only
+-import httpclient
++import httpclient, strutils
+ 
+ type
+   HttpPool* = ref object
+@@ -14,7 +14,13 @@ proc setMaxHttpConns*(n: int) =
+ 
+ proc setHttpProxy*(url: string; auth: string) =
+   if url.len > 0:
+-    proxy = newProxy(url, auth)
++    proxy = newProxy(url)
++    if auth.len > 0:
++      let parts = auth.split(':')
++      if parts.len != 2:
++        raise newException(ValueError, "Invalid auth string")
++      proxy.url.username = parts[0]
++      proxy.url.password = parts[1]
+   else:
+     proxy = nil
+ 
+diff --git a/src/views/about.nim b/src/views/about.nim
+index fe438be..b5b5b70 100644
+--- a/src/views/about.nim
++++ b/src/views/about.nim
+@@ -1,12 +1,39 @@
+ # SPDX-License-Identifier: AGPL-3.0-only
+-import os, strformat
++import os, strutils, strformat
+ import karax/[karaxdsl, vdom]
+ 
++# Build metadata can be overridden with Nim defines. Environment variables are
++# retained for compatibility with the wrapper's Docker build arguments.
+ const
+-  date = staticExec("sh -c 'if [ -n \"$NITTER_UPSTREAM_DATE\" ]; then printf %s \"$NITTER_UPSTREAM_DATE\"; else git show -s --format=\"%cd\" --date=format:\"%Y.%m.%d\"; fi'")
+-  hash = staticExec("sh -c 'if [ -n \"$NITTER_UPSTREAM_HASH\" ]; then printf %s \"$NITTER_UPSTREAM_HASH\"; else git show -s --format=\"%h\"; fi'")
+-  forkHash = staticExec("sh -c 'printf %s \"$NITTER_FORK_HASH\"'")
+-  forkRepo = staticExec("sh -c 'if [ -n \"$NITTER_FORK_REPOSITORY\" ]; then printf %s \"$NITTER_FORK_REPOSITORY\"; else printf %s tiekoetter/nitter; fi'")
++  gitHash {.strdefine.} = ""
++  gitDate {.strdefine.} = ""
++  gitForkHash {.strdefine.} = ""
++  gitForkRepo {.strdefine.} = ""
++
++proc buildMeta(definedValue, envName, command: string;
++               fallback="unknown"): string {.compileTime.} =
++  if definedValue.len > 0:
++    return definedValue
++
++  let envValue = getEnv(envName)
++  if envValue.len > 0:
++    return envValue
++
++  if command.len > 0:
++    let res = gorgeEx(command)
++    if res.exitCode == 0:
++      return res.output.strip()
++
++  fallback
++
++const
++  date = buildMeta(gitDate, "NITTER_UPSTREAM_DATE",
++                   "git show -s --format=\"%cd\" --date=format:\"%Y.%m.%d\"")
++  hash = buildMeta(gitHash, "NITTER_UPSTREAM_HASH",
++                   "git show -s --format=\"%h\"")
++  forkHash = buildMeta(gitForkHash, "NITTER_FORK_HASH", "", "")
++  forkRepo = buildMeta(gitForkRepo, "NITTER_FORK_REPOSITORY", "",
++                       "tiekoetter/nitter")
+   link = "https://github.com/zedeus/nitter/commit/" & hash
+   forkLink = "https://github.com/" & forkRepo & "/commit/" & forkHash
+   version = &"{date}-{hash[0 .. 6]}"
