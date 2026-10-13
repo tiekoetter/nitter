@@ -74,29 +74,6 @@ index 3ee4842..380e967 100644
  # workaround httpbeast file upload bug
  --assertions:off
  
-diff --git a/nitter.nimble b/nitter.nimble
-index b36f498..30ef686 100644
---- a/nitter.nimble
-+++ b/nitter.nimble
-@@ -16,6 +16,7 @@ requires "karax == 1.5.0"
- requires "sass == 0.2.0"
- requires "nimcrypto == 0.7.3"
- requires "markdown == 0.8.8"
-+requires "htmlparser"
- requires "packedjson#9e6fbb6"
- requires "supersnappy == 2.1.4"
- requires "redpool == 0.2.2"
-diff --git a/src/formatters.nim b/src/formatters.nim
-index d1a5afc..3615c82 100644
---- a/src/formatters.nim
-+++ b/src/formatters.nim
-@@ -1,5 +1,5 @@
- # SPDX-License-Identifier: AGPL-3.0-only
--import strutils, strformat, times, uri, tables, xmltree, htmlparser, htmlgen, math
-+import strutils, strformat, times, uri, tables, xmltree, pkg/htmlparser, htmlgen, math
- import std/[enumerate, re]
- import types, utils, query
- 
 diff --git a/src/http_pool.nim b/src/http_pool.nim
 index 2553dd9..f57c952 100644
 --- a/src/http_pool.nim
