@@ -2,10 +2,11 @@ diff --git a/nitter.example.conf b/nitter.example.conf
 index 32fb618..2d70543 100644
 --- a/nitter.example.conf
 +++ b/nitter.example.conf
-@@ -46,0 +47,3 @@ proxyVideos = true
+@@ -46,0 +47,4 @@ proxyVideos = true
 +proxyVideosLock = false       # lock proxyVideos to the configured default
 +proxyImages = true
 +proxyImagesLock = false       # lock proxyImages to the configured default
++disableVideoPreload = true
 diff --git a/src/formatters.nim b/src/formatters.nim
 index d325eb6..e97b60b 100644
 --- a/src/formatters.nim
@@ -36,6 +37,10 @@ index 699ec4c..1401dc5 100644
 @@ -96,0 +97,3 @@ genPrefs:
 +    proxyImages(checkbox, true):
 +      "Proxy images through the server"
++
+@@ -102,0 +106,3 @@ genPrefs:
++    disableVideoPreload(checkbox, true):
++      "Disable video preloading"
 +
 @@ -157 +160 @@ macro genParsePrefs*(prefs): untyped =
 -      if `name` in `prefs`:
@@ -204,7 +209,7 @@ index 1ba9c8b..c5b9da4 100644
 @@ -32 +33,2 @@ proc renderAtomicParagraph(paragraph: ArticleParagraph; article: Article;
 -          video(src=getVidUrl(media.url), controls="")
 +          let source = if prefs.proxyVideos: getVidUrl(media.url) else: media.url
-+          video(src=source, controls="")
++          video(src=source, controls="", preload=prefs.videoPreload)
 @@ -34,2 +34,2 @@ proc renderAtomicParagraph(paragraph: ArticleParagraph; article: Article;
 -          a(href=getOrigPicUrl(media.url), target="_blank"):
 -            img(src=getSmallPic(media.url), alt=entity.caption, loading="lazy")
@@ -428,6 +433,11 @@ index af2f05d..161eebe 100644
 @@ -111 +111 @@ proc genImg*(url: string; class=""; alt=""): VNode =
 -    img(src=getPicUrl(url), class=class, alt=alt, loading="lazy")
 +    img(src=getPicUrl(url, proxy), class=class, alt=alt, loading="lazy")
+@@ -119,0 +120,4 @@ proc getAvatarClass*(prefs: Prefs): string =
++
++proc videoPreload*(prefs: Prefs): string =
++  if prefs.disableVideoPreload: "none"
++  else: "metadata"
 diff --git a/src/views/space.nim b/src/views/space.nim
 index a5cac7b..c1ccca7 100644
 --- a/src/views/space.nim
@@ -504,6 +514,9 @@ index b66269a..3dbeecf 100644
 -    thumb = if bigThumb: getMediumPic(videoData.thumb) else: getSmallPic(videoData.thumb)
 +    thumb = if bigThumb: getMediumPic(videoData.thumb, prefs.proxyImages)
 +            else: getSmallPic(videoData.thumb, prefs.proxyImages)
+@@ -127 +130 @@ proc renderVideoAttachment(videoData: Video; prefs: Prefs; path=""; bigThumb=fal
+-        video(poster=thumb, controls="", muted=prefs.muteVideos):
++        video(poster=thumb, controls="", muted=prefs.muteVideos, preload=prefs.videoPreload):
 @@ -135 +138 @@ proc renderVideoAttachment(videoData: Video; prefs: Prefs; path=""; bigThumb=fal
 -    if videoData.available:
 +    if videoData.available and (prefs.proxyVideos or not isPrefLocked("proxyVideos")):
@@ -516,8 +529,11 @@ index b66269a..3dbeecf 100644
 @@ -163 +166 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
 -        source(src=getPicUrl(gif.url), `type`="video/mp4")
 +        source(src=sourceUrl, `type`="video/mp4")
-@@ -166 +169 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
+@@ -165,2 +168,3 @@ proc renderGifAttachment(gif: Gif; prefs: Prefs; path=""): VNode =
+-      video(class="gif", poster=thumb, controls="", muted="", loop=""):
 -        source(src=getPicUrl(gif.url), `type`="video/mp4")
++      video(class="gif", poster=thumb, controls="", muted="", loop="",
++            preload=prefs.videoPreload):
 +        source(src=sourceUrl, `type`="video/mp4")
 @@ -198 +201 @@ proc renderMedia(media: seq[Media]; prefs: Prefs; path: string; bigThumb=false):
 -            renderPhotoAttachment(mediaItem.photo, bigThumb)
