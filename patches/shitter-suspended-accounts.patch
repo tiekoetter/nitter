@@ -1,0 +1,26 @@
+diff --git a/src/api.nim b/src/api.nim
+index 555a699..a2722e3 100644
+--- a/src/api.nim
++++ b/src/api.nim
+@@ -30,7 +30,7 @@ proc mediaUrl(id, cursor: string): ApiReq =
+   )
+ 
+ proc userTweetsUrl(id: string; cursor: string): ApiReq =
+-  return apiReq(graphUserTweetsV2, restIdVars % [id, cursor, "20"], userTweetsFieldToggles)
++  return apiReq(graphUserTweets, userTweetsVars % [id, cursor, "20"], userTweetsFieldToggles)
+ 
+ proc userTweetsAndRepliesUrl(id: string; cursor: string): ApiReq =
+   result = ApiReq(
+diff --git a/src/auth.nim b/src/auth.nim
+index 259c360..e4b7b0a 100644
+--- a/src/auth.nim
++++ b/src/auth.nim
+@@ -147,7 +147,7 @@ proc isLimited(session: Session; req: ApiReq): bool =
+     return true
+ 
+   let api = req.endpoint(session)
+-  if session.limited and api != graphUserTweetsV2:
++  if session.limited and api != graphUserTweets:
+     if (epochTime().int - session.limitedAt) > hourInSeconds:
+       session.limited = false
+       log "resetting limit: ", session.pretty
